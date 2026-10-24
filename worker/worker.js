@@ -133,8 +133,16 @@ function snapshot(d) {
   return { attrs, nvme: d.nvme, coarse: d.coarse };
 }
 
+// 增量型判断的指标是否真的干净: CRC 和粗粒度错误计数是"增长才报",
+// 级别回落时靠这道闸门确认它们也为 0, 才允许发"恢复"通知
+function countersClean(d) {
+  if (d.attrs[CRC_ATTR] !== undefined && d.attrs[CRC_ATTR] > 0) return false;
+  if (d.coarse && (d.coarse.read_errors > 0 || d.coarse.write_errors > 0)) return false;
+  return true;
+}
+
 // ---------- 判断: 返回 level 0=OK 1=警告 2=紧急 + 原因 ----------
-// 核心原则: 不看厂家阈值, 看关键计数"从无到有"与"持续增长"
+// 核心原则: 不看厂家阈值; 关键计数非零即保持警告 (粘性), 持续增长才升级
 function evaluate(d, prev) {
   const reasons = [];
   let level = 0;
@@ -157,7 +165,9 @@ function evaluate(d, prev) {
     const v = d.attrs[id];
     if (v === undefined) continue;
     const pv = pa[id] || 0;
-    if (v > 0 && pv === 0) warn(`属性 ${id} 首次出现非零值 ${v}`);
+    // 状态型判断 (粘性): 计数非零就保持警告 —— 这类计数只增不减,
+    // "没恶化"不等于"已恢复", 不归零就不解除
+    if (v > 0) warn(`属性 ${id} 当前值 ${v}`);
     if (v > pv && pv > 0) crit(`属性 ${id} 持续增长 ${pv} → ${v}`);
     if (id === 197 && v > 0) crit(`待处理扇区 ${v} (已有数据处于风险中)`);
     if ((id === 5 || id === 198) && v >= 10) crit(`属性 ${id} 已累计 ${v}`);
@@ -231,7 +241,9 @@ async function handleReport(env, body) {
         (reasons.join('; ') || '仍处于紧急状态') + ' — 请尽快备份并换盘',
         'critical');
       lastCritRemind = now;
-    } else if (level === 0 && prevLevel > 0) {
+    } else if (level === 0 && prevLevel > 0 && countersClean(d)) {
+      // 只在指标真回到干净时才报恢复 (典型: 温度回落);
+      // 计数型问题不归零就不发, 状态会停在"警告"表示仍在观察中
       await bark(env, `🟢 硬盘恢复: ${label}`, '指标已回到正常', 'active');
     }
 
