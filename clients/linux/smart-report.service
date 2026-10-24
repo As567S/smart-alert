@@ -1,0 +1,7 @@
+[Unit]
+Description=Report SMART data to smart-alert Worker
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/smart-report.sh

@@ -1,0 +1,20 @@
+name = "smart-alert"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# 每 10 分钟跑一次: 失联检测 (漏 3 个上报周期 = 30 分钟判失联) + 过期历史清理
+[triggers]
+crons = ["*/10 * * * *"]
+
+# 先建库: wrangler d1 create smart-alert, 把返回的 database_id 填回来
+# (或在控制台建 D1 后绑定, 变量名必须是 DB)
+[[d1_databases]]
+binding = "DB"
+database_name = "smart-alert"
+database_id = "填你的D1数据库ID"
+
+# 密钥不要写在这里, 用命令设置:
+#   wrangler secret put REPORT_TOKEN
+#   wrangler secret put BARK_URL      (值形如 https://api.day.app/<Bark key>)
+# 建表 (可选, Worker 首次运行也会自动建):
+#   wrangler d1 execute smart-alert --remote --file=schema.sql
